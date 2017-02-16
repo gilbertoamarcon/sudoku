@@ -46,17 +46,6 @@ int apply_rules(char values[M*M], int domain[M*M]);
 // Backtracking search
 int backtrack(char values[M*M], int domain[M*M], int fixed, int rules);
 
-// Remove from the domain of each cell a value x 
-// if it is assigned to some other cell in the same column, row, or box.
-void rule_1(char values[M*M], int domain[M*M]);
-
-// Assign to any cell a value x if it is the only value left in its domain.
-void rule_2(char values[M*M], int domain[M*M]);
-
-// Assign to any cell a value x if x is not in
-// the domain of any other cell in that row (column or box).
-void rule_3(char values[M*M], int domain[M*M]);
-
 
 // Print variable status
 void print_var(char values[M*M], int domain[M*M], int var);
@@ -182,14 +171,37 @@ int fixed_order_variable(char values[M*M]){
 // Apply all rules
 int apply_rules(char values[M*M], int domain[M*M]){
 
-	rule_1(values,domain);
-	if(!check_satisfaction(domain)) return 0;
+	// Rule 1
+	// Remove from the domain of each cell a value x 
+	// if it is assigned to some other cell in the same column, row, or box.
+	for(int i = 0; i < M; i++)
+	for(int j = 0; j < M; j++){
+		char value = values[i*M+j];
+		if(value != '-')
+			for(int k = 0; k < M; k++){
 
-	rule_2(values,domain);
-	if(!check_satisfaction(domain)) return 0;
+				// Column
+				if(k != i) remove_from_domain(domain,k*M+j,value);
 
-	// rule_3(values,domain);
-	// if(!check_satisfaction(domain)) return 0;
+				// Row
+				if(k != j) remove_from_domain(domain,i*M+k,value);
+
+				// Box
+				int ki = i - i%3 + k/3;
+				int kj = j - j%3 + k%3;
+				if(ki != i || kj != j) remove_from_domain(domain,ki*M+kj,value);
+
+			}
+	}
+
+	// Rule 2
+	// Assign to any cell a value x if it is the only value left in its domain.
+	for(int i = 0; i < M*M; i++)
+	if(domain_size(domain[i]) == 1)
+		values[i] = domain_value(domain[i]);
+
+	// Check for satisfiability
+	if(!check_satisfaction(domain)) return 0;
 
 	return 1;
 }
@@ -232,71 +244,6 @@ int backtrack(char values[M*M], int domain[M*M], int fixed, int rules){
 	// No variable value in the domain is valid, problem unsolvable
 	return 0;
 }
-
-// Remove from the domain of each cell a value x 
-// if it is assigned to some other cell in the same column, row, or box.
-void rule_1(char values[M*M], int domain[M*M]){
-
-	// Going through every set variable and clearing its value from other constrained variables
-	for(int i = 0; i < M; i++)
-	for(int j = 0; j < M; j++){
-		char value = values[i*M+j];
-		if(value != '-')
-			for(int k = 0; k < M; k++){
-
-				// Column
-				if(k != i) remove_from_domain(domain,k*M+j,value);
-
-				// Row
-				if(k != j) remove_from_domain(domain,i*M+k,value);
-
-				// Box
-				int ki = i - i%3 + k/3;
-				int kj = j - j%3 + k%3;
-				if(ki != i || kj != j) remove_from_domain(domain,ki*M+kj,value);
-
-			}
-	}
-
-}
-
-// Assign to any cell a value x if it is the only value left in its domain.
-void rule_2(char values[M*M], int domain[M*M]){
-	for(int i = 0; i < M*M; i++)
-	if(domain_size(domain[i]) == 1)
-		values[i] = domain_value(domain[i]);
-}
-
-// Assign to any cell a value x if x is not in
-// the domain of any other cell in that row (column or box).
-void rule_3(char values[M*M], int domain[M*M]){
-
-	for(int i = 0; i < M; i++)
-	for(int j = 0; j < M; j++)
-	if(values[i*M+j] == '-'){
-
-		int filter = MASK_ALL;
-
-		for(int k = 0; k < M; k++){
-
-			// Column
-			if(values[k*M+j] != '-') filter &= ~domain[k*M+j];
-
-			// Row
-			if(values[i*M+k] != '-') filter &= ~domain[i*M+k];
-
-			// Box
-			int ki = i - i%3 + k/3;
-			int kj = j - j%3 + k%3;
-			if(values[ki*M+kj] != '-') filter &= ~domain[ki*M+kj];
-
-		}
-		if(domain_size(filter) > 0)
-			values[i*M+j] = domain_value(filter);
-	}
-
-}
-
 
 
 
