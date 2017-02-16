@@ -1,2 +1,1 @@
-g++ main.cpp -o main -lm -w -std=c++11
-./main
+gcc main.c -o main -w 
