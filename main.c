@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <time.h>
 #include <string.h>
 
 #define PROBLEM_FILE	"repository.txt"
@@ -11,8 +10,11 @@
 #define MASK_NINE		0x0100
 #define MASK_NONE		0x0000
 #define MASK_ALL		0x01FF
-#define NUM_START		48
+#define NUM_START		49
 #define ALPHA_START		97
+
+// Performance metrics
+int num_nodes = 0;
 
 // Get domain size
 int domain_size(int domain);
@@ -35,19 +37,24 @@ int check_satisfaction(int domain[M*M]);
 // Return the most constrained variable.
 int most_constrained_variable(char values[M*M], int domain[M*M]);
 
+// Return variable in a fixed order.
+int fixed_order_variable(char values[M*M]);
+
 // Apply all rules
 int apply_rules(char values[M*M], int domain[M*M]);
 
 // Backtracking search
-int backtrack(char values[M*M], int domain[M*M]);
+int backtrack(char values[M*M], int domain[M*M], int fixed, int rules);
 
-// Remove from the domain of each cell, a value x if it is assigned to some other cell in the same column, row, or box.
+// Remove from the domain of each cell a value x 
+// if it is assigned to some other cell in the same column, row, or box.
 void rule_1(char values[M*M], int domain[M*M]);
 
 // Assign to any cell a value x if it is the only value left in its domain.
 void rule_2(char values[M*M], int domain[M*M]);
 
-// Assign to any cell a value x if x is not in the domain of any other cell in that row (column or box).
+// Assign to any cell a value x if x is not in
+// the domain of any other cell in that row (column or box).
 void rule_3(char values[M*M], int domain[M*M]);
 
 
@@ -61,45 +68,42 @@ void print_domain(int domain);
 void print_state(char values[M*M],int domain[M*M]);
 
 // Loading problem file
-int load_problems(char *filename, char values[M*M], int domain[M*M], int problem_number);
+int load_problems(char *filename, char values[M*M], int domain[M*M], int problem_number,char *description);
 
 int main(int argc, char **argv){
 
 	// Line arguments
-	int problem_number = 1;
 	int verbose = 0;
-	if(argc == 2){
-		if(argv[1][0] == '-' && argv[1][1] == 'v') verbose = 1;
-		else problem_number = atoi(argv[1]);
-	}
-	if(argc == 3){
-		if(argv[1][0] == '-' && argv[1][1] == 'v'){
-			verbose = 1;
-			problem_number = atoi(argv[2]);
-		}
-		else{
-			problem_number = atoi(argv[1]);
-			if(argv[2][0] == '-' && argv[2][1] == 'v')
-				verbose = 1;
-		}
+	int fixed = 0;
+	int rules = 0;
+	int problem_number = 1;
+	for(int i = 1; i < argc; i++){
+		if(argv[i][0] == '-' && argv[i][1] == 'v') verbose = 1; else
+		if(argv[i][0] == '-' && argv[i][1] == 'f') fixed = 1; else
+		if(argv[i][0] == '-' && argv[i][1] == 'r') rules = 1; else
+		problem_number = atoi(argv[i]);
 	}
 
 	// Memory allocation
 	char values[M*M];
 	int domain[M*M];
+	char description[BUFFER_SIZE] = "";
 
 	// Loading problem
-	load_problems(PROBLEM_FILE,values,domain,problem_number);
+	load_problems(PROBLEM_FILE,values,domain,problem_number,description);
+	if(description == NULL) return 0;
+	else printf("Problem %s",description);
 	apply_rules(values,domain);
 
 	// Print original values and domain
 	if(verbose) print_state(values,domain);
 
 	// CSP search
-	if(backtrack(values,domain))
-		printf("SUCCESS!\n");
+	if(backtrack(values,domain,fixed,rules))
+		printf(" SUCCESS!");
 	else
-		printf("FAILURE!\n");
+		printf(" FAILURE!");
+		printf(" Nodes: %d\n",num_nodes);
 
 	// Print final values and domain
 	if(verbose) print_state(values,domain);
@@ -121,7 +125,7 @@ int domain_size(int domain){
 char domain_value(int domain){
 	for(int i = 0; i < M; i++){
 		if ((domain&MASK_ONE) > 0)
-			return i+1+NUM_START;
+			return i+NUM_START;
 		domain >>= 1;
 	}
 	return '-';
@@ -130,14 +134,14 @@ char domain_value(int domain){
 // Check if value is in domain
 int check_in_domain(int domain, char value){
 	if(value == '-') return 0;
-	if(((domain >> (value-1-NUM_START))&MASK_ONE) > 0) return 1;
+	if(((domain >> (value-NUM_START))&MASK_ONE) > 0) return 1;
 	return 0;
 }
 
 // Remove value from variable domain
 void remove_from_domain(int domain[M*M], int variable, char value){
 	if(value == '-') return;
-	domain[variable] &= ~(MASK_ONE << (value-1-NUM_START));
+	domain[variable] &= ~(MASK_ONE << (value-NUM_START));
 }
 
 // Check if all variables have values assigned
@@ -168,6 +172,13 @@ int most_constrained_variable(char values[M*M], int domain[M*M]){
 	return min;
 }
 
+// Return variable in a fixed order.
+int fixed_order_variable(char values[M*M]){
+	for(int i = 0; i < M*M; i++)
+	if(values[i] == '-')
+		return i;
+}
+
 // Apply all rules
 int apply_rules(char values[M*M], int domain[M*M]){
 
@@ -184,7 +195,9 @@ int apply_rules(char values[M*M], int domain[M*M]){
 }
 
 // Backtracking search
-int backtrack(char values[M*M], int domain[M*M]){
+int backtrack(char values[M*M], int domain[M*M], int fixed, int rules){
+
+	num_nodes++;
 
 	// Termination condition
 	if(check_complete(values)) return 1;
@@ -196,24 +209,32 @@ int backtrack(char values[M*M], int domain[M*M]){
 	memcpy(values_back, values, M*M*sizeof(char));
 
 	// Selecting the most constrained variable
-	int var = most_constrained_variable(values,domain);
+	int var = 0;
+	if(fixed)
+		var = fixed_order_variable(values);
+	else
+		var = most_constrained_variable(values,domain);
 
-	for(int i = 1; i <= M; i++)
+	// For every value in the variable domain
+	for(int i = 0; i < M; i++)
 	if(check_in_domain(domain[var],i+NUM_START)){
+
+		// Assign value, apply_rules and backtrack
 		values[var] = i+NUM_START;
-		if(apply_rules(values,domain))
-			if(backtrack(values,domain)) return 1;
+		if(!rules || apply_rules(values,domain))
+			if(backtrack(values,domain,fixed,rules)) return 1;
 
 		// Restoring backup 
 		memcpy(domain, domain_back, M*M*sizeof(int));
 		memcpy(values, values_back, M*M*sizeof(char));
 	}
 
-	// No variable value in the domain is valid
+	// No variable value in the domain is valid, problem unsolvable
 	return 0;
 }
 
-// Remove from the domain of each cell, a value x if it is assigned to some other cell in the same column, row, or box.
+// Remove from the domain of each cell a value x 
+// if it is assigned to some other cell in the same column, row, or box.
 void rule_1(char values[M*M], int domain[M*M]){
 
 	// Going through every set variable and clearing its value from other constrained variables
@@ -246,10 +267,10 @@ void rule_2(char values[M*M], int domain[M*M]){
 		values[i] = domain_value(domain[i]);
 }
 
-// Assign to any cell a value x if x is not in the domain of any other cell in that row (column or box).
+// Assign to any cell a value x if x is not in
+// the domain of any other cell in that row (column or box).
 void rule_3(char values[M*M], int domain[M*M]){
 
-	// Going through every set variable and clearing its value from other constrained variables
 	for(int i = 0; i < M; i++)
 	for(int j = 0; j < M; j++)
 	if(values[i*M+j] == '-'){
@@ -331,7 +352,7 @@ void print_state(char values[M*M],int domain[M*M]){
 }
 
 // Loading problem file
-int load_problems(char *filename, char values[M*M], int domain[M*M], int problem_number){
+int load_problems(char *filename, char values[M*M], int domain[M*M], int problem_number, char *description){
 
 	char fileBuffer[BUFFER_SIZE] = "";
 	FILE *file = NULL;
@@ -346,7 +367,16 @@ int load_problems(char *filename, char values[M*M], int domain[M*M], int problem
 		for(int i = 0; i <= M+1; i++)
 			if(fgets(fileBuffer,BUFFER_SIZE,file) == NULL) return 1;
 
-	printf("Problem %s",fileBuffer);
+	strcpy(description,fileBuffer);
+	for(int i = 0; i < BUFFER_SIZE; i++)
+	if(description[i] == '\n'){
+		description[i] = '\0';	
+		for(int j = i-1; j > 0; j--){
+			if(description[j] != ' ')
+				break;
+			description[j] = '\0';			
+		}
+	}
 
 	// Parsing problem values
 	for(int i = 0; i < M; i++){
@@ -354,7 +384,7 @@ int load_problems(char *filename, char values[M*M], int domain[M*M], int problem
 		char *r = fileBuffer;
 		for(int j = 0; j < M; j++){
 			values[i*M+j] = *(r++);
-			domain[i*M+j] = (MASK_ONE << (values[i*M+j]-1-NUM_START));
+			domain[i*M+j] = (MASK_ONE << (values[i*M+j]-NUM_START));
 			if(values[i*M+j] == '0'){
 				values[i*M+j] = '-';
 				domain[i*M+j] = MASK_ALL;
