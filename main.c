@@ -69,7 +69,6 @@ int main(int argc, char **argv){
 	for(int i = 1; i < argc; i++){
 		if(argv[i][0] == '-' && argv[i][1] == 'v') verbose = 1; else
 		if(argv[i][0] == '-' && argv[i][1] == 'f') fixed = 1; else
-		if(argv[i][0] == '-' && argv[i][1] == 'r') rules = 1; else
 		problem_number = atoi(argv[i]);
 	}
 
@@ -233,7 +232,7 @@ int backtrack(char values[M*M], int domain[M*M], int fixed, int rules){
 
 		// Assign value, apply_rules and backtrack
 		values[var] = i+NUM_START;
-		if(!rules || apply_rules(values,domain))
+		if(apply_rules(values,domain))
 			if(backtrack(values,domain,fixed,rules)) return 1;
 
 		// Restoring backup 
