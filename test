@@ -1,4 +1,4 @@
 for i in {1..77}
 do
-	./main $i
+	./main $i $1 $2
 done

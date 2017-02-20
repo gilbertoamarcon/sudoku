@@ -199,6 +199,34 @@ int apply_rules(char values[M*M], int domain[M*M]){
 	if(domain_size(domain[i]) == 1)
 		values[i] = domain_value(domain[i]);
 
+	// Rule 3
+	// Assign to any cell a value x if x is not in the domain of
+	// any other cell in that row (column or box).
+	for(int i = 0; i < M; i++)
+	for(int j = 0; j < M; j++){
+		char value = values[i*M+j];
+		if(value == '-'){
+			int aux = MASK_NONE;
+			for(int k = 0; k < M; k++){
+
+				// Column
+				if(k != i) aux |= domain[k*M+j];
+
+				// Row
+				if(k != j) aux |= domain[i*M+k];
+
+				// Box
+				int ki = i - i%3 + k/3;
+				int kj = j - j%3 + k%3;
+				if(ki != i || kj != j) aux |= domain[ki*M+kj];
+
+			}
+			aux = (~aux)&MASK_ALL;
+			if(domain_size(aux))
+				values[i*M+j] = domain_value(aux);
+		}
+	}
+
 	// Check for satisfiability
 	if(!check_satisfaction(domain)) return 0;
 
