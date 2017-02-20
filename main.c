@@ -25,14 +25,23 @@ char domain_value(int domain);
 // Check if value is in domain
 int check_in_domain(int domain, char value);
 
+// Assing value to variable and update its domain
+void assign_value(char values[M*M], int domain[M*M], int variable, char value);
+
 // Remove value from domain
 void remove_from_domain(int domain[M*M], int variable, char value);
 
 // Check if all variables have values assigned
 int check_complete(char values[M*M]);
 
+// Check if a particular variable have constraints satisfied
+int check_var_satisfaction(char values[M*M], char variable);
+
 // Check if all constraints are satisfied
-int check_satisfaction(int domain[M*M]);
+int check_satisfaction(char values[M*M]);
+
+// Check for empty domain
+int check_non_empty_domain(int domain[M*M]);
 
 // Return the most constrained variable.
 int most_constrained_variable(char values[M*M], int domain[M*M]);
@@ -44,7 +53,7 @@ int fixed_order_variable(char values[M*M]);
 int apply_rules(char values[M*M], int domain[M*M]);
 
 // Backtracking search
-int backtrack(char values[M*M], int domain[M*M], int fixed, int rules);
+int backtrack(char values[M*M], int domain[M*M], int ordering, int rules);
 
 
 // Print variable status
@@ -62,13 +71,14 @@ int load_problems(char *filename, char values[M*M], int domain[M*M], int problem
 int main(int argc, char **argv){
 
 	// Line arguments
-	int verbose = 0;
-	int fixed = 0;
-	int rules = 0;
+	int verbose		= 0;
+	int ordering	= 0;
+	int rules		= 0;
 	int problem_number = 1;
 	for(int i = 1; i < argc; i++){
-		if(argv[i][0] == '-' && argv[i][1] == 'v') verbose = 1; else
-		if(argv[i][0] == '-' && argv[i][1] == 'f') fixed = 1; else
+		if(argv[i][0] == '-' && argv[i][1] == 'v') verbose	= 1; else
+		if(argv[i][0] == '-' && argv[i][1] == 'o') ordering	= 1; else
+		if(argv[i][0] == '-' && argv[i][1] == 'r') rules	= 1; else
 		problem_number = atoi(argv[i]);
 	}
 
@@ -81,13 +91,12 @@ int main(int argc, char **argv){
 	load_problems(PROBLEM_FILE,values,domain,problem_number,description);
 	if(description == NULL) return 0;
 	else printf("Problem %s",description);
-	apply_rules(values,domain);
 
 	// Print original values and domain
 	if(verbose) print_state(values,domain);
 
 	// CSP search
-	if(backtrack(values,domain,fixed,rules))
+	if(backtrack(values,domain,ordering,rules))
 		printf(" SUCCESS!");
 	else
 		printf(" FAILURE!");
@@ -126,6 +135,13 @@ int check_in_domain(int domain, char value){
 	return 0;
 }
 
+// Assing value to variable and update its domain
+void assign_value(char values[M*M], int domain[M*M], int variable, char value){
+	if(value == '-') return;
+	values[variable] = value;
+	domain[variable] = MASK_ONE << (value-NUM_START);
+}
+
 // Remove value from variable domain
 void remove_from_domain(int domain[M*M], int variable, char value){
 	if(value == '-') return;
@@ -140,8 +156,55 @@ int check_complete(char values[M*M]){
 	return 1;
 }
 
+// Check if a particular variable have constraints satisfied
+int check_var_satisfaction(char values[M*M], char variable){
+	int j = variable%M;
+	int i = (variable-j)/M;
+	char value = values[variable];
+	if(value != '-')
+	for(int k = 0; k < M; k++){
+
+		// Column
+		if(k != i) if(value == values[k*M+j]) return 0;
+
+		// Row
+		if(k != j) if(value == values[i*M+k]) return 0;
+
+		// Box
+		int ki = i - i%3 + k/3;
+		int kj = j - j%3 + k%3;
+		if(ki != i || kj != j) if(value == values[ki*M+kj]) return 0;
+
+	}
+	return 1;
+}
+
 // Check if all constraints are satisfied
-int check_satisfaction(int domain[M*M]){
+int check_satisfaction(char values[M*M]){
+	for(int i = 0; i < M; i++)
+	for(int j = 0; j < M; j++){
+		char value = values[i*M+j];
+		if(value != '-')
+			for(int k = 0; k < M; k++){
+
+				// Column
+				if(k != i) if(value == values[k*M+j]) return 0;
+
+				// Row
+				if(k != j) if(value == values[i*M+k]) return 0;
+
+				// Box
+				int ki = i - i%3 + k/3;
+				int kj = j - j%3 + k%3;
+				if(ki != i || kj != j) if(value == values[ki*M+kj]) return 0;
+
+			}
+	}
+	return 1;
+}
+
+// Check for empty domain
+int check_non_empty_domain(int domain[M*M]){
 	for(int i = 0; i < M*M; i++)
 	if(domain[i] == MASK_NONE)
 		return 0;
@@ -227,16 +290,18 @@ int apply_rules(char values[M*M], int domain[M*M]){
 		}
 	}
 
-	// Check for satisfiability
-	if(!check_satisfaction(domain)) return 0;
-
 	return 1;
 }
 
 // Backtracking search
-int backtrack(char values[M*M], int domain[M*M], int fixed, int rules){
+int backtrack(char values[M*M], int domain[M*M], int ordering, int rules){
 
-	num_nodes++;
+	num_nodes++;	
+
+	if(rules) apply_rules(values,domain);
+
+	// Check for empty domain
+	if(!check_non_empty_domain(domain)) return 0;
 
 	// Termination condition
 	if(check_complete(values)) return 1;
@@ -249,26 +314,24 @@ int backtrack(char values[M*M], int domain[M*M], int fixed, int rules){
 
 	// Selecting the most constrained variable
 	int var = 0;
-	if(fixed)
-		var = fixed_order_variable(values);
-	else
-		var = most_constrained_variable(values,domain);
+	if(ordering)	var = most_constrained_variable(values,domain);
+	else			var = fixed_order_variable(values);
 
 	// For every value in the variable domain
 	for(int i = 0; i < M; i++)
 	if(check_in_domain(domain[var],i+NUM_START)){
 
-		// Assign value, apply_rules and backtrack
-		values[var] = i+NUM_START;
-		if(apply_rules(values,domain))
-			if(backtrack(values,domain,fixed,rules)) return 1;
+		// Assign value and backtrack
+		assign_value(values,domain,var,i+NUM_START);
+		if(check_var_satisfaction(values,var))
+			if(backtrack(values,domain,ordering,rules)) return 1;
 
 		// Restoring backup 
 		memcpy(domain, domain_back, M*M*sizeof(int));
 		memcpy(values, values_back, M*M*sizeof(char));
 	}
 
-	// No variable value in the domain is valid, problem unsolvable
+	// No variable value in the domain is valid, backtrack
 	return 0;
 }
 
@@ -306,6 +369,7 @@ void print_domain(int domain){;
 
 // Print values and domain
 void print_state(char values[M*M],int domain[M*M]){
+	printf("\n");
 	printf("   a b c   d e f   g h i");
 	printf("          a         b         c           d         e         f           g         h         i");
 	printf("\n");
